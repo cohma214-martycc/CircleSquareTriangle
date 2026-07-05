@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>CircleSquareTriangle — a two-player thinking game</title>
+<style>
+  :root{
+    --ink:#2B3A55;        /* storybook navy */
+    --paper:#EEF5FB;      /* picture-book sky */
+    --card:#FFFFFF;
+    --red:#FFAEAE;        /* pastel red — piece color */
+    --blue:#A9CBFF;       /* pastel blue — piece color */
+    --yellow:#FFE18C;     /* pastel yellow — piece color */
+    --green:#47B881;      /* success (UI, not a piece color) */
+    --green-dark:#2e8b63;
+    --line:#D8E4F0;       /* soft border */
+    --focus:#4D96FF;      /* vivid — keyboard focus rings stay easy to see */
+    --alert:#FFC93C;      /* vivid — "check this clue" glow stays attention-grabbing */
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ background:var(--paper); color:var(--ink); overscroll-behavior:none; }
+  body{
+    font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-tap-highlight-color:transparent;
+    position:fixed; inset:0; overflow:hidden;      /* no page scroll, ever */
+    touch-action:manipulation;
+  }
+  .display{ font-family:ui-rounded,"SF Pro Rounded","Segoe UI Rounded",-apple-system,"Segoe UI",Roboto,sans-serif; font-weight:700; letter-spacing:-.01em; }
+  .hidden{ display:none !important; }
+  button{ font:inherit; color:inherit; background:none; border:none; cursor:pointer; touch-action:manipulation; }
+  button:focus-visible{ outline:4px solid var(--focus); outline-offset:2px; }
+
+  /* ================= app shell: fixed viewport, flex column ================= */
+  #shell{
+    height:100vh; height:100dvh;
+    display:flex; flex-direction:column;
+    max-width:30rem; margin:0 auto;
+    padding:6px 10px 0 10px;
+  }
+
+  /* ---- header ---- */
+  .hd{ flex:none; }
+  .hd-row{ display:flex; align-items:center; gap:8px; }
+  .hd-title{ font-size:1.15rem; flex:1; }
+  .date-chip{ font-size:.7rem; background:var(--ink); color:#fff; padding:3px 10px; border-radius:999px; white-space:nowrap; }
+  .help-btn{ width:32px; height:32px; border-radius:999px; border:3px solid var(--ink); background:#fff; font-size:1rem; line-height:1; }
+  .hd-tabs{ display:flex; gap:6px; margin-top:6px; }
+  .tab-btn{
+    flex:1; min-height:44px; border-radius:14px;
+    border:3px solid var(--ink); background:#fff;
+    font-size:.85rem; transition:all .15s;
+    display:flex; align-items:center; justify-content:center; gap:4px;
+  }
+  .tab-btn.active{ background:var(--ink); color:#fff; }
+  .tab-badge{ font-size:.8rem; }
+  .boss-banner{
+    margin-top:6px; text-align:center; font-size:.72rem;
+    background:var(--ink); color:#fff; border-radius:10px; padding:4px 8px;
+  }
+
+  /* ---- zone labels ---- */
+  .zone-row{ display:flex; align-items:center; gap:6px; margin:6px 0 4px; }
+  .zone-pill{ font-size:.68rem; color:#fff; padding:2px 10px; border-radius:999px; }
+  .pill-ink{ background:var(--ink); }
+  .pill-green{ background:var(--green); }
+  .zone-hint{ font-size:.66rem; font-weight:800; opacity:.55; }
+
+  /* ---- clue zone: compact tickets, internal scroll only as a safety valve ---- */
+  #clueZone{ flex:none; }
+  #clueArea{
+    display:flex; flex-direction:column; gap:4px;
+    max-height:26dvh; overflow-y:auto;
+    -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+    padding-bottom:2px;
+  }
+  .ticket{
+    background:var(--card);
+    border:3px solid var(--line);
+    border-radius:12px;
+    padding:.32rem .55rem;
+    font-weight:700;
+    font-size:.82rem;
+    line-height:1.55;
+    box-shadow:0 2px 0 rgba(43,58,85,.08);
+    transition:border-color .2s, background .2s;
+    text-align:left; width:100%;
+  }
+  .ticket b{ font-weight:800; }
+  .icon-inline{ display:inline-block; vertical-align:-4px; margin:0 1px; width:20px; height:20px; }
+  .icon-dot{ width:17px; height:17px; vertical-align:-4px; }
+  .icon-map{ width:24px; height:24px; vertical-align:-6px; }
+
+  /* ---- board: square sized by leftover height, labels overlaid ---- */
+  #boardZone{
+    flex:1 1 auto; min-height:150px;
+    display:flex; align-items:center; justify-content:center;
+    padding:14px 0 2px 0;
+  }
+  #boardWrap{
+    position:relative;
+    height:min(100%, 84vw);
+    aspect-ratio:1/1;
+    transform:translateX(10px);
+  }
+  #grid{
+    position:absolute; inset:0;
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr);
+    gap:6px;
+  }
+  #colLabels{
+    position:absolute; top:-13px; left:0; right:0;
+    display:grid; grid-template-columns:repeat(3,1fr);
+    text-align:center; font-size:9px; font-weight:800; opacity:.5;
+  }
+  #rowLabels{
+    position:absolute; left:-24px; top:0; bottom:0;
+    display:flex; flex-direction:column; justify-content:space-around;
+    font-size:9px; font-weight:800; opacity:.5; text-align:right; width:22px;
+  }
+  .cell{
+    background:var(--card);
+    border:4px solid var(--line);
+    border-radius:18px;
+    padding:9%;
+    transition:transform .12s, border-color .2s, background .2s, box-shadow .2s;
+  }
+  .cell:active{ transform:scale(.96); }
+  .cell.given{ background:#F2F7FD; }
+  .cell.empty{ border-style:dashed; }
+  .cell:focus-visible{ outline:4px solid var(--focus); outline-offset:2px; }
+
+  #hintMsg{ flex:none; text-align:center; font-weight:800; font-size:.78rem; min-height:1.4rem; display:flex; align-items:center; justify-content:center; }
+  .boss-go{
+    background:var(--ink); color:#fff; border-radius:999px;
+    padding:7px 18px; font-size:.82rem; min-height:36px;
+    border-bottom:3px solid #1c2940;
+  }
+
+  /* ---- sticker pieces ---- */
+  .piece-svg{ width:100%; height:100%; display:block; filter:drop-shadow(0 3px 0 rgba(43,58,85,.18)); }
+  .chip-svg{ width:100%; height:100%; display:block; filter:drop-shadow(0 1.5px 0 rgba(43,58,85,.2)); }
+  .piece-wrap{ display:block; width:100%; height:100%; opacity:1; transition:opacity .9s ease; }
+  .piece-wrap.ghosted{ opacity:0; }
+
+  /* ---- Builder palette (bottom of shell, not overlaid) ---- */
+  #palette{
+    flex:none;
+    background:rgba(255,255,255,.95);
+    border-top:4px solid var(--line);
+    margin:4px -10px 0 -10px;
+    padding:2px 10px calc(8px + env(safe-area-inset-bottom)) 10px;
+  }
+  .pal-body{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .pal-picks{ display:flex; flex-direction:column; gap:5px; }
+  .pal-row{ display:flex; gap:5px; }
+  .pal-btn{
+    width:60px; height:60px; border-radius:16px;
+    background:var(--card); border:4px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .12s, border-color .15s, box-shadow .15s;
+  }
+  .pal-btn:active{ transform:scale(.92); }
+  .pal-btn.selected{ border-color:var(--ink); transform:scale(1.06); box-shadow:0 4px 0 rgba(43,58,85,.25); }
+  .pal-icon{ width:38px; height:38px; display:block; }
+  .pal-swatch{ width:36px; height:36px; display:block; }
+  .pal-side{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .pal-caption{ font-size:.6rem; font-weight:800; opacity:.55; }
+  .preview{
+    width:62px; height:62px; border-radius:16px;
+    border:4px dashed var(--line); background:#fff;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .preview.set{ border-style:solid; }
+  .preview-piece{ width:42px; height:42px; display:block; }
+  .preview-q{ font-size:1.4rem; opacity:.3; font-weight:800; }
+
+  /* ---- secret flip card ---- */
+  .flip-scene{ perspective:800px; width:86px; height:86px; }
+  .flip-card{ position:relative; width:100%; height:100%; transform-style:preserve-3d; transition:transform .5s; }
+  .flip-card.flipped{ transform:rotateY(180deg); }
+  .flip-face{
+    position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden;
+    border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    border:4px solid var(--ink);
+  }
+  .flip-front{ background:var(--ink); color:#fff; }
+  .flip-back{ background:#fff; transform:rotateY(180deg); }
+  .flip-emoji{ font-size:1.15rem; }
+  .flip-label{ font-size:.58rem; line-height:1.2; text-align:center; }
+  #secretPiece{ width:30px; height:30px; }
+  #secretMap{ width:36px; height:36px; }
+
+  /* ---- overlays ---- */
+  .overlay{
+    position:fixed; inset:0; z-index:50;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(43,58,85,.45); padding:1.5rem;
+  }
+  .modal{
+    background:#fff; border:4px solid var(--ink); border-radius:22px;
+    padding:1.25rem; text-align:center; width:100%; max-width:20rem;
+    box-shadow:0 25px 50px -12px rgba(43,58,85,.35);
+  }
+  .modal-title{ font-size:1.6rem; }
+  .modal-sub{ font-weight:800; opacity:.7; margin:.25rem 0 1rem; }
+  .modal-body{ font-size:.85rem; font-weight:600; line-height:1.6; text-align:left; margin:.5rem 0 1rem; }
+  .btn{ width:100%; min-height:56px; border-radius:16px; font-size:1.05rem; }
+  .btn-green{ background:var(--green); color:#fff; border-bottom:4px solid var(--green-dark); margin-bottom:.5rem; }
+  .btn-plain{ background:#fff; border:4px solid var(--line); min-height:46px; font-size:.9rem; }
+  .btn-ready{
+    background:#fff; color:var(--ink);
+    border:3px solid var(--line); border-bottom:6px solid var(--line);
+    margin-bottom:.6rem; transition:background .2s, border-color .2s, color .2s;
+  }
+  .btn-ready.ready-done{ background:#E9F9F1; border-color:var(--green); color:var(--green-dark); }
+  .welcome-emoji{ font-size:1.8rem; margin-bottom:.25rem; letter-spacing:.15em; }
+  .btn-3d:active{ border-bottom-width:2px; transform:translateY(2px); }
+  .win-pieces{ display:flex; justify-content:center; gap:8px; margin-bottom:.5rem; }
+  .win-piece{ width:46px; height:46px; }
+
+  /* ---- animations ---- */
+  @keyframes pop{ 0%{transform:scale(.25) rotate(-8deg);} 60%{transform:scale(1.14) rotate(3deg);} 100%{transform:scale(1) rotate(0);} }
+  .pop{ animation:pop .34s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes wobble{ 0%,100%{transform:translateX(0) rotate(0);} 20%{transform:translateX(-5px) rotate(-3deg);} 40%{transform:translateX(5px) rotate(3deg);} 60%{transform:translateX(-4px) rotate(-2deg);} 80%{transform:translateX(4px) rotate(2deg);} }
+  .wobble{ animation:wobble .5s ease both; }
+  @keyframes gentlepulse{ 0%,100%{box-shadow:0 0 0 0 rgba(255,201,60,.0);} 50%{box-shadow:0 0 0 6px rgba(255,201,60,.55);} }
+  .hmm{ animation:gentlepulse 1.4s ease-in-out infinite; border-color:var(--alert) !important; }
+  @keyframes fall{ 0%{transform:translateY(-8vh) rotate(0deg);} 100%{transform:translateY(110vh) rotate(720deg);} }
+  .confetti{ position:fixed; top:0; width:12px; height:16px; border-radius:3px; z-index:60; pointer-events:none; animation:fall linear forwards; }
+  @keyframes bouncein{ 0%{transform:scale(.6); opacity:0;} 70%{transform:scale(1.06);} 100%{transform:scale(1); opacity:1;} }
+  .bouncein{ animation:bouncein .45s cubic-bezier(.2,1.3,.4,1) both; }
+  @keyframes floaty{ 0%,100%{transform:translateY(0) rotate(-3deg);} 50%{transform:translateY(-8px) rotate(3deg);} }
+  .floaty{ animation:floaty 2.2s ease-in-out infinite; }
+
+  @media (prefers-reduced-motion: reduce){
+    .pop,.wobble,.hmm,.confetti,.bouncein,.floaty{ animation:none !important; }
+    .flip-card{ transition:none; }
+    .piece-wrap{ transition:opacity .2s; }
+  }
+
+  /* taller phones / tablets get a little more air */
+  @media (min-height: 760px){
+    .hd-title{ font-size:1.35rem; }
+    .ticket{ font-size:.9rem; padding:.45rem .65rem; }
+    #clueArea{ max-height:30dvh; gap:6px; }
+    .pal-btn{ width:64px; height:64px; }
+  }
+</style>
+</head>
+<body>
+  <div id="shell">
+
+    <!-- slim header -->
+    <header class="hd">
+      <div class="hd-row">
+        <h1 class="display hd-title">CircleSquareTriangle</h1>
+        <span id="dateChip" class="date-chip display"></span>
+        <button id="helpBtn" class="help-btn display" aria-label="How to play">?</button>
+      </div>
+      <div class="hd-tabs" role="tablist" aria-label="Today's puzzles">
+        <button id="tabA" role="tab" class="tab-btn display">🌈 Rainbow Rows<span class="tab-badge" id="badgeA"></span></button>
+        <button id="tabB" role="tab" class="tab-btn display">🔍 Clue Hunt<span class="tab-badge" id="badgeB"></span></button>
+      </div>
+      <div id="bossBanner" class="boss-banner display hidden">👻 Boss level — pieces hide after 3 seconds! Keep talking!</div>
+    </header>
+
+    <!-- Thinker zone: clue tickets -->
+    <section id="clueZone" aria-label="Clues for the Thinker">
+      <div class="zone-row">
+        <span class="zone-pill display pill-ink">🧠 Thinker</span>
+        <span class="zone-hint">read these out loud together</span>
+      </div>
+      <div id="clueArea"></div>
+    </section>
+
+    <!-- board -->
+    <section id="boardZone" aria-label="Puzzle board">
+      <div id="boardWrap">
+        <div id="colLabels" aria-hidden="true"><span>left</span><span>middle</span><span>right</span></div>
+        <div id="rowLabels" aria-hidden="true"><span>top</span><span>mid</span><span>btm</span></div>
+        <div id="grid"></div>
+      </div>
+    </section>
+    <p id="hintMsg" aria-live="polite"></p>
+
+    <!-- Builder zone -->
+    <div id="palette">
+      <div class="zone-row">
+        <span class="zone-pill display pill-green">🙌 Builder</span>
+        <span class="zone-hint">pick a shape + a color, then tap a space</span>
+      </div>
+      <div class="pal-body">
+        <div class="pal-picks">
+          <div id="shapeRow" class="pal-row" role="group" aria-label="Pick a shape"></div>
+          <div id="colorRow" class="pal-row" role="group" aria-label="Pick a color"></div>
+        </div>
+        <div class="pal-side">
+          <div id="preview" class="preview"></div>
+          <span class="pal-caption">ready!</span>
+        </div>
+        <div id="secretWrap" class="pal-side hidden">
+          <div class="flip-scene">
+            <button id="secretCard" class="flip-card" aria-label="Secret card. Builders only. Tap to peek.">
+              <div class="flip-face flip-front">
+                <span class="flip-emoji">🤫</span>
+                <span class="display flip-label">Builders<br>only!</span>
+              </div>
+              <div class="flip-face flip-back">
+                <div id="secretPiece"></div>
+                <div id="secretMap"></div>
+              </div>
+            </button>
+          </div>
+          <span class="pal-caption">secret card</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- welcome overlay: game is blocked until both players tap in -->
+  <div id="welcomeOverlay" class="overlay">
+    <div class="modal bouncein">
+      <p class="welcome-emoji">🔵 🔺 🟨</p>
+      <h2 class="display modal-title">Ready to play?</h2>
+      <p class="modal-sub">Tap your name when you're ready!</p>
+      <button id="readyAdele" class="display btn btn-ready btn-3d">🙋‍♀️ Adele is ready</button>
+      <button id="readyAlma" class="display btn btn-ready btn-3d">🙋 Alma is ready</button>
+    </div>
+  </div>
+
+  <!-- how-to overlay -->
+  <div id="helpOverlay" class="overlay hidden">
+    <div class="modal bouncein">
+      <h2 class="display modal-title" id="howTitle"></h2>
+      <div id="howBody" class="modal-body"></div>
+      <button id="helpClose" class="display btn btn-green btn-3d">Got it!</button>
+    </div>
+  </div>
+
+  <!-- win overlay -->
+  <div id="winOverlay" class="overlay hidden">
+    <div class="modal bouncein">
+      <div class="win-pieces" id="winPieces"></div>
+      <h2 class="display modal-title" id="winTitle">You did it!</h2>
+      <p class="modal-sub" id="winSub">High five, team! 🙌</p>
+      <button id="winPrimary" class="display btn btn-green btn-3d"></button>
+      <button id="winClose" class="display btn btn-plain">Admire our work</button>
+    </div>
+  </div>
+
+<script>
+"use strict";
+/* =====================================================================
+   LOGIC ENGINE — no DOM in this section (testable in Node)
+   Pieces are {s, c}: shape index 0..2, color index 0..2
+   Grid is a flat array of 9 (row-major); null = empty.
+===================================================================== */
+const SHAPES = ["circle","square","triangle"];
+const COLORS = ["red","blue","yellow"];
+const HEX    = {red:"#FFAEAE", blue:"#A9CBFF", yellow:"#FFE18C"};
+const ROWN   = ["top","middle","bottom"];
+const COLN   = ["left","middle","right"];
+
+/* Seedable RNG: daily puzzles come from a date-derived seed, so everyone
+   gets the same puzzle on the same day and it can't be re-rolled. */
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15, 1|a); t=t+Math.imul(t^t>>>7, 61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+let rng = Math.random;
+const ri = n => Math.floor(rng()*n);
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=ri(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+const rc = i => [Math.floor(i/3), i%3];
+function posName(i){ const [r,c]=rc(i); return (r===1&&c===1) ? "middle" : `${ROWN[r]} ${COLN[c]}`; }
+function neighbors(i){ const [r,c]=rc(i); const out=[]; if(r>0)out.push(i-3); if(r<2)out.push(i+3); if(c>0)out.push(i-1); if(c<2)out.push(i+1); return out; }
+const CORNERS=[0,2,6,8];
+
+/* ---- All 12 3x3 Latin squares ---- */
+function latinSquares(){
+  const P=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+  const out=[];
+  for(const p of P) for(const q of P){
+    if(p.every((v,i)=>v!==q[i])) out.push([p,q,p.map((v,i)=>3-v-q[i])]);
+  }
+  return out;
+}
+const LS = latinSquares();
+
+/* =====================================================================
+   MODE A — "Rainbow Rows" (full 3x3 double Latin square)
+   Rule: every row & column has one of each shape and one of each color.
+   Givens are revealed until the solution is unique among all 144
+   (shapeLS x colorLS) combinations, plus one comfort reveal.
+===================================================================== */
+function genA(){
+  const sIdx=ri(12), cIdx=ri(12);
+  const sLS=LS[sIdx], cLS=LS[cIdx];
+  const solution=[];
+  for(let i=0;i<9;i++){ const [r,c]=rc(i); solution.push({s:sLS[r][c], c:cLS[r][c]}); }
+
+  const consistentCount = given => {
+    let n=0;
+    for(const A of LS) for(const B of LS){
+      let ok=true;
+      for(const g of given){ const [r,c]=rc(g); if(A[r][c]!==solution[g].s || B[r][c]!==solution[g].c){ ok=false; break; } }
+      if(ok) n++;
+    }
+    return n;
+  };
+
+  const order=shuffle([0,1,2,3,4,5,6,7,8]);
+  const given=[];
+  for(const cell of order){
+    given.push(cell);
+    if(consistentCount(given)===1) break;
+  }
+  // one comfort reveal so the first move is friendly
+  for(const cell of order){ if(!given.includes(cell)){ given.push(cell); break; } }
+
+  return { mode:"A", solution, given:new Set(given) };
+}
+
+/* Definite rule breaks in mode A: duplicate shape or color in a row/col */
+function violationsA(grid){
+  const bad=new Set();
+  const lines=[];
+  for(let r=0;r<3;r++) lines.push([r*3,r*3+1,r*3+2]);
+  for(let c=0;c<3;c++) lines.push([c,c+3,c+6]);
+  for(const line of lines){
+    for(let a=0;a<3;a++) for(let b=a+1;b<3;b++){
+      const A=grid[line[a]], B=grid[line[b]];
+      if(A&&B){
+        if(A.s===B.s || A.c===B.c){ bad.add(line[a]); bad.add(line[b]); }
+      }
+    }
+  }
+  return bad;
+}
+
+/* =====================================================================
+   MODE B — "Clue Hunt" (partial fill + clue tickets + secret card)
+   A solver enumerates all fills of the empty cells and guarantees the
+   chosen clue set has exactly ONE solution before the puzzle is shown.
+===================================================================== */
+
+/* Clue factories: each returns {test(fullGrid), partial(grid), text parts} */
+function clueRowColNo(kind, isRow, idx, val){ // kind: 's'|'c'
+  const cells = isRow ? [idx*3,idx*3+1,idx*3+2] : [idx,idx+3,idx+6];
+  return {
+    id:`no-${kind}-${isRow?'r':'c'}${idx}-${val}`,
+    test: g => cells.every(i => g[i][kind]!==val),
+    partial: g => cells.some(i => g[i] && g[i][kind]===val) ? "violated" : "ok",
+    cells,
+    tpl:{ type:"lineNo", kind, isRow, idx, val }
+  };
+}
+function clueCount(kind, val, n){
+  return {
+    id:`count-${kind}-${val}`,
+    test: g => g.filter(x=>x[kind]===val).length===n,
+    partial: g => g.filter(x=>x && x[kind]===val).length>n ? "violated" : "ok",
+    cells:[0,1,2,3,4,5,6,7,8],
+    tpl:{ type:"count", kind, val, n }
+  };
+}
+function clueCellNot(cell, kind, val){
+  return {
+    id:`not-${cell}-${kind}-${val}`,
+    test: g => g[cell][kind]!==val,
+    partial: g => (g[cell] && g[cell][kind]===val) ? "violated" : "ok",
+    cells:[cell],
+    tpl:{ type:"cellNot", cell, kind, val }
+  };
+}
+function clueCornerShape(s){
+  return {
+    id:`corner-${s}`,
+    test: g => CORNERS.some(i=>g[i].s===s),
+    partial: g => CORNERS.every(i=>g[i]) && !CORNERS.some(i=>g[i].s===s) ? "violated" : "ok",
+    cells:CORNERS.slice(),
+    tpl:{ type:"corner", s }
+  };
+}
+function clueNextTo(piece, kind, val){ // "a [piece] is next to a [val] shape/color"
+  const match = (x,p)=> x && x.s===p.s && x.c===p.c;
+  return {
+    id:`adj-${piece.s}${piece.c}-${kind}-${val}`,
+    test: g => g.some((x,i)=> match(x,piece) && neighbors(i).some(j=>g[j][kind]===val)),
+    partial: g => {
+      // violated only when fully determined false
+      if(g.some(x=>!x)) return "ok";
+      return g.some((x,i)=> match(x,piece) && neighbors(i).some(j=>g[j][kind]===val)) ? "ok" : "violated";
+    },
+    cells:[0,1,2,3,4,5,6,7,8],
+    tpl:{ type:"nextTo", piece, kind, val }
+  };
+}
+function clueSecret(cell, piece){
+  return {
+    id:"secret",
+    test: g => g[cell].s===piece.s && g[cell].c===piece.c,
+    partial: g => (g[cell] && (g[cell].s!==piece.s || g[cell].c!==piece.c)) ? "violated" : "ok",
+    cells:[cell],
+    tpl:{ type:"secret", cell }
+  };
+}
+
+/* Count solutions over empty cells (early exit above `cap`) */
+function countSolutionsB(solutionLikeGivens, empties, clues, cap=2){
+  const grid = solutionLikeGivens.slice();
+  let count=0;
+  const options=[];
+  for(let s=0;s<3;s++) for(let c=0;c<3;c++) options.push({s,c});
+  function rec(k){
+    if(count>=cap) return;
+    if(k===empties.length){
+      if(clues.every(cl=>cl.test(grid))) count++;
+      return;
+    }
+    for(const o of options){
+      grid[empties[k]]=o;
+      // cheap prune with partial checks
+      let ok=true;
+      for(const cl of clues){ if(cl.partial(grid)==="violated"){ ok=false; break; } }
+      if(ok) rec(k+1);
+      grid[empties[k]]=null;
+    }
+  }
+  for(const e of empties) grid[e]=null;
+  rec(0);
+  return count;
+}
+
+function genB(){
+  for(let attempt=0; attempt<60; attempt++){
+    // Build a solution with guaranteed variety
+    const solution=[];
+    for(let i=0;i<9;i++) solution.push({s:ri(3), c:ri(3)});
+    if(new Set(solution.map(x=>x.s)).size<3 || new Set(solution.map(x=>x.c)).size<3) continue;
+
+    const empties = shuffle([0,1,2,3,4,5,6,7,8]).slice(0,4).sort((a,b)=>a-b);
+    const secretCell = empties[ri(empties.length)];
+    const secret = clueSecret(secretCell, solution[secretCell]);
+
+    // Candidate pool: only clues TRUE of the solution
+    const pool=[];
+    for(let idx=0; idx<3; idx++){
+      for(const isRow of [true,false]){
+        for(const kind of ["s","c"]){
+          for(let val=0; val<3; val++){
+            const cl=clueRowColNo(kind,isRow,idx,val);
+            const cells = isRow ? [idx*3,idx*3+1,idx*3+2] : [idx,idx+3,idx+6];
+            if(cl.test(solution) && cells.some(i=>empties.includes(i))) pool.push(cl);
+          }
+        }
+      }
+    }
+    for(const kind of ["s","c"]) for(let val=0; val<3; val++){
+      const n = solution.filter(x=>x[kind]===val).length;
+      if(n>0) pool.push(clueCount(kind,val,n));
+    }
+    for(const e of empties){
+      if(e===secretCell) continue;
+      for(const kind of ["s","c"]) for(let val=0; val<3; val++){
+        if(solution[e][kind]!==val) pool.push(clueCellNot(e,kind,val));
+      }
+    }
+    for(let s=0;s<3;s++){ const cl=clueCornerShape(s); if(cl.test(solution) && CORNERS.some(i=>empties.includes(i))) pool.push(cl); }
+    // a couple of adjacency candidates from real neighbor pairs touching empties
+    for(const e of empties){
+      for(const nb of neighbors(e)){
+        const cl=clueNextTo(solution[nb], "c", solution[e].c);
+        if(cl.test(solution)) pool.push(cl);
+      }
+    }
+
+    // Best-first greedy: at each step, add one of the clues that shrinks the
+    // solution space the most (top-3 with randomness, for puzzle variety)
+    let remaining = shuffle(pool);
+    let chosen=[secret];
+    let count = countSolutionsB(solution, empties, chosen, 500);
+    while(count>1 && remaining.length){
+      const scored = remaining
+        .map(cl => ({cl, n: countSolutionsB(solution, empties, [...chosen, cl], count)}))
+        .filter(x => x.n < count)
+        .sort((a,b) => a.n - b.n);
+      if(!scored.length) break;
+      const pick = scored[ri(Math.min(3, scored.length))];
+      chosen.push(pick.cl); count=pick.n;
+      remaining = remaining.filter(cl => cl !== pick.cl);
+    }
+    if(count!==1) continue;
+
+    // Prune: drop any clue (not the secret) that isn't needed for uniqueness
+    for(let i=chosen.length-1; i>=1; i--){
+      const trial = chosen.filter((_,j)=>j!==i);
+      if(countSolutionsB(solution, empties, trial)===1) chosen=trial;
+    }
+    if(chosen.length>7) continue; // keep it readable
+
+    const given=new Set([0,1,2,3,4,5,6,7,8].filter(i=>!empties.includes(i)));
+    return { mode:"B", solution, given, empties, secretCell, clues:chosen };
+  }
+  // Extremely unlikely fallback: mode A puzzle
+  return genA();
+}
+
+/* =====================================================================
+   DAILY PUZZLES — one per mode per calendar day.
+   The generator RNG is seeded from the local date, so the same day always
+   produces the same two puzzles and there is nothing to re-roll.
+   For Clue Hunt we generate several candidates and keep the one with the
+   fewest clue tickets, to fit a phone screen without scrolling.
+===================================================================== */
+function dateSeed(d=new Date()){ return d.getFullYear()*10000 + (d.getMonth()+1)*100 + d.getDate(); }
+function makeDaily(mode, seed){
+  rng = mulberry32(((seed*31 + (mode==="A" ? 1 : 2)) ^ 0x5F3759DF) >>> 0);
+  let p;
+  if(mode==="A"){
+    p = genA();
+  } else {
+    let best=null;
+    for(let k=0;k<10;k++){
+      const cand=genB();
+      if(cand.mode==="B" && (!best || cand.clues.length<best.clues.length)) best=cand;
+    }
+    p = best || genB();
+  }
+  rng = Math.random; // restore: cosmetic randomness (confetti) stays fresh
+  return p;
+}
+
+/* Expose for Node tests */
+if (typeof module!=="undefined") module.exports = { genA, genB, countSolutionsB, violationsA, LS, makeDaily, dateSeed };
+
+/* =====================================================================
+   UI — everything below touches the DOM
+===================================================================== */
+if (typeof document!=="undefined"){
+
+const $ = id => document.getElementById(id);
+const INK="#2B3A55";
+
+/* ---------- SVG builders ---------- */
+function shapePath(s){
+  if(s===0) return `<circle cx="50" cy="50" r="37"/>`;
+  if(s===1) return `<rect x="14" y="14" width="72" height="72" rx="14"/>`;
+  return `<path d="M50 12 L90 84 L10 84 Z" stroke-linejoin="round"/>`;
+}
+/* teardrop used for COLOR (not one of the three puzzle-piece shapes) */
+function dropPath(){
+  return `<path d="M50 8 C66 34,82 52,82 68 C82 84.5,67.9 92,50 92 C32.1 92,18 84.5,18 68 C18 52,34 34,50 8 Z" stroke-linejoin="round"/>`;
+}
+function pieceSVG(p){
+  return `<svg viewBox="0 0 100 100" class="piece-svg" aria-hidden="true">
+    <g fill="${HEX[COLORS[p.c]]}" stroke="${INK}" stroke-width="6">${shapePath(p.s)}</g></svg>`;
+}
+/* a color chip, rendered as a droplet so it's never mistaken for the circle piece shape */
+function colorChipSVG(c){
+  return `<svg viewBox="0 0 100 100" class="chip-svg" aria-hidden="true">
+    <g fill="${HEX[COLORS[c]]}" stroke="${INK}" stroke-width="7">${dropPath()}</g></svg>`;
+}
+/* mini 3x3 map with one highlighted space — lets a non-reader see WHERE */
+function miniMapSVG(cell){
+  let r="";
+  for(let i=0;i<9;i++){
+    const x=(i%3)*31+3, y=Math.floor(i/3)*31+3;
+    const hit = i===cell;
+    r+=`<rect x="${x}" y="${y}" width="26" height="26" rx="7"
+        fill="${hit?"#4D96FF":"#E7EEF6"}" stroke="${INK}" stroke-width="${hit?5:2.5}"/>`;
+  }
+  return `<svg viewBox="0 0 98 98" aria-hidden="true" style="width:100%;height:100%;display:block">${r}</svg>`;
+}
+function miniPiece(p){ return `<span class="icon-inline">${pieceSVG(p)}</span>`; }
+function colorDot(c){ return `<span class="icon-inline icon-dot">${colorChipSVG(c)}</span>`; }
+function shapeGhost(s){ return `<span class="icon-inline"><svg viewBox="0 0 100 100" class="piece-svg"><g fill="#fff" stroke="${INK}" stroke-width="6">${shapePath(s)}</g></svg></span>`; }
+function mapIcon(cell){ return `<span class="icon-inline icon-map">${miniMapSVG(cell)}</span>`; }
+const colorWord = c => `<b>${COLORS[c]}</b> ${colorDot(c)}`;
+const shapeWord = s => `<b>${SHAPES[s]}</b> ${shapeGhost(s)}`;
+
+/* ---------- clue text (vocabulary: cells are "spaces") ---------- */
+function clueHTML(cl){
+  const t=cl.tpl;
+  switch(t.type){
+    case "lineNo":{
+      const line = t.isRow ? `<b>${ROWN[t.idx]} row</b>` : `<b>${COLN[t.idx]} column</b>`;
+      return t.kind==="c"
+        ? `No ${colorWord(t.val)} shapes in the ${line}.`
+        : `No ${shapeWord(t.val)}s in the ${line}.`;
+    }
+    case "count":
+      return t.kind==="c"
+        ? `The whole board has exactly <b>${t.n}</b> ${colorWord(t.val)} shape${t.n===1?"":"s"}.`
+        : `The whole board has exactly <b>${t.n}</b> ${shapeWord(t.val)}${t.n===1?"":"s"}.`;
+    case "cellNot":
+      return t.kind==="c"
+        ? `This space ${mapIcon(t.cell)} is <b>not</b> ${colorWord(t.val)}.`
+        : `This space ${mapIcon(t.cell)} is <b>not</b> a ${shapeWord(t.val)}.`;
+    case "corner":
+      return `A ${shapeWord(t.s)} lives in a corner.`;
+    case "nextTo":
+      return `The ${miniPiece(t.piece)} <b>${COLORS[t.piece.c]} ${SHAPES[t.piece.s]}</b> is next to a ${colorWord(t.val)} shape.`;
+    case "secret":
+      return `🤫 Builder: peek at the <b>secret card</b> — it fills this space ${mapIcon(t.cell)}!`;
+  }
+}
+
+/* ---------- tiny sounds (WebAudio, fails silently) ---------- */
+let AC=null;
+function audio(){ try{ AC = AC || new (window.AudioContext||window.webkitAudioContext)(); return AC; }catch(e){ return null; } }
+function tone(freq, t0, dur=.12, type="sine", vol=.18){
+  const ac=audio(); if(!ac) return;
+  const o=ac.createOscillator(), g=ac.createGain();
+  o.type=type; o.frequency.value=freq;
+  g.gain.setValueAtTime(vol, ac.currentTime+t0);
+  g.gain.exponentialRampToValueAtTime(.001, ac.currentTime+t0+dur);
+  o.connect(g); g.connect(ac.destination);
+  o.start(ac.currentTime+t0); o.stop(ac.currentTime+t0+dur+.02);
+}
+const sndPlace=()=>tone(620,0,.1,"triangle");
+const sndRemove=()=>tone(300,0,.09,"triangle",.12);
+const sndWobble=()=>tone(240,0,.12,"sine",.1);
+const sndWin=()=>{ [523,659,784,1047].forEach((f,i)=>tone(f,i*.12,.22,"triangle",.2)); };
+const sndBossWin=()=>{ [523,659,784,1047,1319,1568].forEach((f,i)=>tone(f,i*.1,.24,"triangle",.2)); };
+
+/* ---------- state ----------
+   One puzzle per mode per day (seeded by the calendar date).
+   Per-mode status: "unsolved" → "solved" → "boss" (ghost replay) → "bossSolved".
+*/
+const TODAY = dateSeed();
+function freshModeState(){
+  return {
+    P: null,                        // generated lazily on first visit to the tab
+    placed: Array(9).fill(null),
+    status: "unsolved",
+    hidden: Array(9).fill(false),   // ghost mode: piece faded out
+    peek:   Array(9).fill(false),   // ghost mode: briefly revealed
+    hideToken: Array(9).fill(0),    // invalidates stale hide timers
+  };
+}
+const S = { A: freshModeState(), B: freshModeState(), mode:"B" };
+function ensureP(m){ if(!S[m].P) S[m].P = makeDaily(m, TODAY); }
+let sel={s:null,c:null};
+let hintTimer=null;
+
+const st = () => S[S.mode];
+const inBoss = () => st().status==="boss";
+
+function currentGrid(){
+  const m=st(), g=[];
+  for(let i=0;i<9;i++) g.push(m.P.given.has(i) ? m.P.solution[i] : m.placed[i]);
+  return g;
+}
+
+/* ---------- rendering ---------- */
+function renderHeader(){
+  const d=new Date();
+  $("dateChip").textContent = d.toLocaleDateString(undefined,{weekday:"short", day:"numeric", month:"short"});
+  ["A","B"].forEach(m=>{
+    $("tab"+m).classList.toggle("active", S.mode===m);
+    $("tab"+m).setAttribute("aria-selected", S.mode===m);
+    const stM=S[m].status;
+    $("badge"+m).textContent = stM==="bossSolved" ? "🏆" : (stM==="solved"||stM==="boss") ? "✓" : "";
+  });
+  $("bossBanner").classList.toggle("hidden", !inBoss());
+}
+
+function renderClues(){
+  const m=st(), area=$("clueArea");
+  if(m.P.mode==="A"){
+    area.innerHTML = `
+      <div class="ticket">🌈 Every <b>row</b> and every <b>column</b> has one of each shape ${shapeGhost(0)}${shapeGhost(1)}${shapeGhost(2)} …</div>
+      <div class="ticket">🎨 … and one of each color ${colorDot(0)}${colorDot(1)}${colorDot(2)} — no repeats!</div>
+      <div class="ticket">🤝 Thinker says <b>what's missing</b> from a line — Builder <b>makes it</b> and taps it in!</div>`;
+  } else {
+    area.innerHTML = m.P.clues.map((cl,i)=>
+      `<div class="ticket" data-clue="${i}">${clueHTML(cl)}</div>`).join("");
+  }
+}
+
+function renderGrid(){
+  const m=st(), grid=$("grid");
+  grid.innerHTML="";
+  const bad = definiteBadCells();
+  for(let i=0;i<9;i++){
+    const btn=document.createElement("button");
+    const isGiven=m.P.given.has(i);
+    const piece = isGiven ? m.P.solution[i] : m.placed[i];
+    btn.className = "cell " + (isGiven ? "given" : (piece? "" : "empty"));
+    let label = `${posName(i)} space`;
+    if(isGiven) label += `: ${COLORS[piece.c]} ${SHAPES[piece.s]} (already filled)`;
+    else if(piece && inBoss() && m.hidden[i] && !m.peek[i]) label += ": hidden piece, tap to peek";
+    else if(piece) label += `: ${COLORS[piece.c]} ${SHAPES[piece.s]}`;
+    else label += ", empty";
+    btn.setAttribute("aria-label", label);
+    if(piece){
+      const ghosted = !isGiven && inBoss() && m.hidden[i] && !m.peek[i];
+      btn.innerHTML = `<span class="piece-wrap${ghosted?" ghosted":""}">${pieceSVG(piece)}</span>`;
+    }
+    if(isGiven) btn.disabled=true;
+    else btn.addEventListener("click", ()=>tapCell(i));
+    if(bad.has(i)) btn.classList.add("hmm");
+    grid.appendChild(btn);
+  }
+}
+
+function renderPalette(){
+  const sr=$("shapeRow"), cr=$("colorRow");
+  sr.innerHTML=""; cr.innerHTML="";
+  for(let s=0;s<3;s++){
+    const b=document.createElement("button");
+    b.className="pal-btn"+(sel.s===s?" selected":"");
+    b.setAttribute("aria-label",`shape: ${SHAPES[s]}`);
+    b.setAttribute("aria-pressed", sel.s===s);
+    const fill = sel.c===null ? "#E7EEF6" : HEX[COLORS[sel.c]];
+    b.innerHTML=`<span class="pal-icon"><svg viewBox="0 0 100 100" class="piece-svg" aria-hidden="true"><g fill="${fill}" stroke="${INK}" stroke-width="6">${shapePath(s)}</g></svg></span>`;
+    b.addEventListener("click", ()=>{ sel.s = (sel.s===s? null : s); sndPlace(); renderPalette(); });
+    sr.appendChild(b);
+  }
+  for(let c=0;c<3;c++){
+    const b=document.createElement("button");
+    b.className="pal-btn"+(sel.c===c?" selected":"");
+    b.setAttribute("aria-label",`color: ${COLORS[c]}`);
+    b.setAttribute("aria-pressed", sel.c===c);
+    b.innerHTML=`<span class="pal-swatch">${colorChipSVG(c)}</span>`;
+    b.addEventListener("click", ()=>{ sel.c = (sel.c===c? null : c); sndPlace(); renderPalette(); });
+    cr.appendChild(b);
+  }
+  const pv=$("preview");
+  if(sel.s!==null && sel.c!==null){
+    pv.innerHTML=`<span class="preview-piece pop">${pieceSVG(sel)}</span>`;
+    pv.classList.add("set");
+  } else {
+    pv.innerHTML=`<span class="preview-q">?</span>`;
+    pv.classList.remove("set");
+  }
+}
+
+function renderSecret(){
+  const m=st(), wrap=$("secretWrap");
+  if(m.P.mode!=="B"){ wrap.classList.add("hidden"); return; }
+  wrap.classList.remove("hidden");
+  const piece=m.P.solution[m.P.secretCell];
+  $("secretPiece").innerHTML=pieceSVG(piece);
+  $("secretMap").innerHTML=miniMapSVG(m.P.secretCell);
+  $("secretCard").classList.remove("flipped");
+}
+
+function renderHow(){
+  if(st().P.mode==="A"){
+    $("howTitle").textContent="🌈 Rainbow Rows";
+    $("howBody").innerHTML=`Like a shape Sudoku! Every row and column needs one of each shape <b>and</b> one of each color — no repeats.<br><br>🧠 The Thinker figures out what's missing from a line. 🙌 The Builder makes it and taps it into a space. Tap a placed piece to pop it back out.<br><br>📅 There's <b>one puzzle a day</b> per mode. Solve it to unlock the 👻 <b>Boss replay</b>, where placed pieces hide after 3 seconds — say them out loud to remember together!`;
+  } else {
+    $("howTitle").textContent="🔍 Clue Hunt";
+    $("howBody").innerHTML=`Some spaces are already filled. Read the clue tickets together to work out the empty ones.<br><br>🤫 One clue needs the <b>secret card</b> — only the Builder may peek! The little map on the card shows exactly which space it fills.<br><br>If a piece breaks a clue, the clue glows so you can check together.<br><br>📅 There's <b>one puzzle a day</b> per mode. Solve it to unlock the 👻 <b>Boss replay</b>, where placed pieces hide after 3 seconds!`;
+  }
+}
+
+function renderAll(){
+  renderHeader(); renderClues(); renderGrid(); renderPalette(); renderSecret(); renderHow();
+  if(inBoss()) setHint("👻 Boss level! Pieces hide after 3 seconds — keep talking!", true);
+  else renderStatusLine();
+}
+
+/* ---------- gentle checking ---------- */
+function definiteBadCells(){
+  const m=st(), g=currentGrid();
+  if(m.P.mode==="A") return violationsA(g);
+  const bad=new Set();
+  const flag=i=>{ if(m.placed[i]) bad.add(i); };
+  document.querySelectorAll("[data-clue]").forEach(el=>el.classList.remove("hmm"));
+  m.P.clues.forEach((cl,i)=>{
+    if(cl.partial(g)!=="violated") return;
+    const el=document.querySelector(`[data-clue="${i}"]`);
+    if(el) el.classList.add("hmm");
+    const t=cl.tpl;
+    if(t.type==="cellNot" || t.type==="secret") flag(t.cell);
+    else if(t.type==="lineNo"){
+      cl.cells.forEach(k=>{ if(g[k] && g[k][t.kind]===t.val) flag(k); });
+    }
+    else if(t.type==="count"){
+      g.forEach((x,k)=>{ if(x && x[t.kind]===t.val) flag(k); });
+    }
+    else if(t.type==="corner"){ CORNERS.forEach(flag); }
+  });
+  return bad;
+}
+
+function renderStatusLine(){
+  const el=$("hintMsg"), m=st();
+  if(m.status==="solved"){
+    el.innerHTML=`<button id="bossGo" class="boss-go display btn-3d">👻 Start boss replay!</button>`;
+    $("bossGo").addEventListener("click", startBoss);
+  } else if(m.status==="bossSolved"){
+    el.textContent="🏆 Conquered! See you tomorrow.";
+  } else {
+    el.textContent="";
+  }
+}
+
+function setHint(msg, sticky=false){
+  const el=$("hintMsg");
+  clearTimeout(hintTimer);
+  if(!msg){ renderStatusLine(); return; }
+  el.textContent=msg;
+  if(!sticky) hintTimer=setTimeout(renderStatusLine, 3500);
+}
+
+/* ---------- ghost mode helpers ---------- */
+function scheduleHide(i){
+  const m=st(), mode=S.mode;
+  const token = ++m.hideToken[i];
+  setTimeout(()=>{
+    const mm=S[mode];
+    if(mm.hideToken[i]!==token || !mm.placed[i] || mm.status!=="boss") return;
+    mm.hidden[i]=true;
+    if(S.mode===mode){
+      // fade in place (no rebuild, so the CSS transition plays)
+      const wrap=$("grid").children[i]?.querySelector(".piece-wrap");
+      if(wrap) wrap.classList.add("ghosted");
+      else renderGrid();
+    }
+  }, 3000);
+}
+function peekCell(i){
+  const m=st(), mode=S.mode;
+  m.peek[i]=true;
+  renderGrid();
+  setTimeout(()=>{
+    const mm=S[mode];
+    mm.peek[i]=false;
+    if(S.mode===mode) renderGrid();
+  }, 1300);
+}
+
+/* ---------- interaction ---------- */
+function tapCell(i){
+  const m=st();
+  if(m.status==="solved" || m.status==="bossSolved") return; // finished board is read-only
+  if(m.placed[i]){
+    // Ghost mode: a hidden piece peeks instead of vanishing on a stray tap
+    if(inBoss() && m.hidden[i] && !m.peek[i]){ sndPlace(); peekCell(i); return; }
+    if(sel.s!==null && sel.c!==null && (m.placed[i].s!==sel.s || m.placed[i].c!==sel.c)){
+      m.placed[i]={...sel}; sndPlace();
+      m.hidden[i]=false; m.hideToken[i]++;
+      if(inBoss()) scheduleHide(i);
+    } else {
+      m.placed[i]=null; m.hidden[i]=false; m.hideToken[i]++;
+      sndRemove();
+    }
+    afterMove(i); return;
+  }
+  if(sel.s===null || sel.c===null){
+    setHint(sel.s===null && sel.c===null ? "👇 Builder: pick a shape and a color first!"
+          : sel.s===null ? "👇 Pick a shape too!" : "👇 Pick a color too!");
+    return;
+  }
+  m.placed[i]={...sel};
+  m.hidden[i]=false; m.hideToken[i]++;
+  if(inBoss()) scheduleHide(i);
+  sndPlace();
+  afterMove(i);
+}
+
+function afterMove(i){
+  const m=st();
+  renderGrid();
+  const btn=$("grid").children[i];
+  if(btn && m.placed[i]) btn.querySelector("svg")?.classList.add("pop");
+
+  const g=currentGrid();
+  const bad=definiteBadCells();
+  const anyGlow = bad.size>0 || !!document.querySelector("[data-clue].hmm");
+  if(m.placed[i] && bad.has(i)){
+    sndWobble();
+    if(inBoss() && m.hidden[i]) peekCell(i);   // wrong hidden piece reveals itself
+    btn?.classList.add("wobble");
+    setHint("🤔 Hmm — check the glowing clue together!");
+  }
+
+  if(g.every(x=>x)){
+    const correct = g.every((x,k)=> x.s===m.P.solution[k].s && x.c===m.P.solution[k].c);
+    if(correct) win();
+    else setHint(anyGlow ? "🤔 Almost! Check the glowing clue together." : "😮 So close! Read each clue again together…", true);
+  }
+}
+
+/* ---------- celebration + daily flow ---------- */
+function startBoss(){
+  const m=st();
+  m.status="boss";
+  m.placed=Array(9).fill(null);
+  m.hidden=Array(9).fill(false);
+  m.peek=Array(9).fill(false);
+  m.hideToken=m.hideToken.map(t=>t+1);
+  sel={s:null,c:null};
+  closeOverlay("winOverlay");
+  renderAll();
+  setHint("👻 Boss level! Pieces hide after 3 seconds — keep talking!", true);
+}
+
+function win(){
+  const m=st();
+  const wasBoss = m.status==="boss";
+  m.status = wasBoss ? "bossSolved" : "solved";
+  (wasBoss ? sndBossWin : sndWin)();
+  renderHeader();
+  renderStatusLine();
+
+  $("winPieces").innerHTML=[0,1,2].map(k=>
+    `<span class="win-piece floaty" style="animation-delay:${k*.2}s">${pieceSVG({s:k,c:k})}</span>`).join("");
+
+  const other = S.mode==="A" ? "B" : "A";
+  const otherName = other==="A" ? "🌈 Rainbow Rows" : "🔍 Clue Hunt";
+  const primary=$("winPrimary");
+  if(!wasBoss){
+    $("winTitle").textContent="You did it!";
+    $("winSub").textContent="High five, team! 🙌";
+    primary.textContent="👻 Boss replay — pieces vanish!";
+    primary.onclick=startBoss;
+  } else {
+    $("winTitle").textContent="SUPER TEAM! 🏆";
+    if(S[other].status==="unsolved"){
+      $("winSub").textContent="You beat the boss level!";
+      primary.textContent=`Try today's ${otherName}!`;
+      primary.onclick=()=>{ closeOverlay("winOverlay"); switchMode(other); };
+    } else {
+      $("winSub").textContent="Both puzzles conquered — see you tomorrow! 🌙";
+      primary.textContent="Take a bow 🎉";
+      primary.onclick=()=>closeOverlay("winOverlay");
+    }
+  }
+  openOverlay("winOverlay");
+
+  const cols=["#FF5D5D","#4D96FF","#FFC93C","#47B881","#B28DFF"];
+  const n = wasBoss ? 140 : 90;
+  for(let k=0;k<n;k++){
+    const d=document.createElement("div");
+    d.className="confetti";
+    d.style.left=Math.random()*100+"vw";
+    d.style.background=cols[Math.floor(Math.random()*cols.length)];
+    d.style.animationDuration=(2.2+Math.random()*1.8)+"s";
+    d.style.animationDelay=(Math.random()*0.9)+"s";
+    if(Math.random()<.4) d.style.borderRadius="50%";
+    document.body.appendChild(d);
+    setTimeout(()=>d.remove(), 5200);
+  }
+}
+
+/* ---------- welcome check-in: both players tap in before play starts ---------- */
+const READY = { adele:false, alma:false };
+function updateWelcome(){
+  $("readyAdele").classList.toggle("ready-done", READY.adele);
+  $("readyAlma").classList.toggle("ready-done", READY.alma);
+  $("readyAdele").textContent = READY.adele ? "✅ Adele is ready!" : "🙋\u200d♀️ Adele is ready";
+  $("readyAlma").textContent  = READY.alma  ? "✅ Alma is ready!"  : "🙋 Alma is ready";
+  if(READY.adele && READY.alma){
+    tone(784,0,.15,"triangle",.22); tone(988,.12,.2,"triangle",.2);
+    setTimeout(()=>closeOverlay("welcomeOverlay"), 550);
+  }
+}
+
+/* ---------- wiring ---------- */
+function openOverlay(id){ $(id).classList.remove("hidden"); }
+function closeOverlay(id){ $(id).classList.add("hidden"); }
+function switchMode(m){
+  S.mode=m;
+  ensureP(m);
+  sel={s:null,c:null};
+  renderAll();
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  $("readyAdele").addEventListener("click", ()=>{ if(READY.adele) return; READY.adele=true; sndPlace(); updateWelcome(); });
+  $("readyAlma").addEventListener("click", ()=>{ if(READY.alma) return; READY.alma=true; sndPlace(); updateWelcome(); });
+  $("tabA").addEventListener("click", ()=>switchMode("A"));
+  $("tabB").addEventListener("click", ()=>switchMode("B"));
+  $("helpBtn").addEventListener("click", ()=>{ renderHow(); openOverlay("helpOverlay"); });
+  $("helpClose").addEventListener("click", ()=>closeOverlay("helpOverlay"));
+  $("winClose").addEventListener("click", ()=>closeOverlay("winOverlay"));
+  $("secretCard").addEventListener("click", ()=>$("secretCard").classList.toggle("flipped"));
+  document.addEventListener("pointerdown", ()=>{ const ac=audio(); if(ac && ac.state==="suspended") ac.resume(); }, {once:true});
+  ensureP(S.mode);
+  renderAll();
+});
+
+} /* end DOM guard */
+</script>
+</body>
+</html>

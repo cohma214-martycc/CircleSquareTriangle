@@ -738,7 +738,7 @@ function freshModeState(){
     hideToken: Array(9).fill(0),    // invalidates stale hide timers
   };
 }
-const S = { A: freshModeState(), B: freshModeState(), mode:"B" };
+const S = { A: freshModeState(), B: freshModeState(), mode:"A" };
 function ensureP(m){ if(!S[m].P) S[m].P = makeDaily(m, TODAY); }
 let sel={s:null,c:null};
 let hintTimer=null;

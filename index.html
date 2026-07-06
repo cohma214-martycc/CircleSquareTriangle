@@ -87,6 +87,16 @@
     text-align:left; width:100%;
   }
   .ticket b{ font-weight:800; }
+  .rules-toggle{
+    display:flex; align-items:center; gap:6px;
+    background:#F4F8FC; border-style:dashed;
+  }
+  .rules-toggle .rules-chev{
+    margin-left:auto; font-size:.7rem;
+    transition:transform .2s;
+  }
+  .rules-toggle[aria-expanded="true"] .rules-chev{ transform:rotate(180deg); }
+  #rulesBody{ display:flex; flex-direction:column; gap:4px; }
   .icon-inline{ display:inline-block; vertical-align:-4px; margin:0 1px; width:20px; height:20px; }
   .icon-dot{ width:17px; height:17px; vertical-align:-4px; }
   .icon-map{ width:24px; height:24px; vertical-align:-6px; }
@@ -741,6 +751,7 @@ function freshModeState(){
 const S = { A: freshModeState(), B: freshModeState(), mode:"A" };
 function ensureP(m){ if(!S[m].P) S[m].P = makeDaily(m, TODAY); }
 let sel={s:null,c:null};
+let rulesOpenA=false;   /* Rainbow Rows rules start folded away */
 let hintTimer=null;
 
 const st = () => S[S.mode];
@@ -768,10 +779,17 @@ function renderHeader(){
 function renderClues(){
   const m=st(), area=$("clueArea");
   if(m.P.mode==="A"){
+    // The Rainbow Rows rules never change, so they start collapsed.
     area.innerHTML = `
-      <div class="ticket">🌈 Every <b>row</b> and every <b>column</b> has one of each shape ${shapeGhost(0)}${shapeGhost(1)}${shapeGhost(2)} …</div>
-      <div class="ticket">🎨 … and one of each color ${colorDot(0)}${colorDot(1)}${colorDot(2)} — no repeats!</div>
-      <div class="ticket">🤝 Thinker says <b>what's missing</b> from a line — Builder <b>makes it</b> and taps it in!</div>`;
+      <button id="rulesToggle" class="ticket rules-toggle" aria-expanded="${rulesOpenA}" aria-controls="rulesBody">
+        📖 <b>The rules</b> <span class="rules-chev" aria-hidden="true">▼</span>
+      </button>
+      <div id="rulesBody" class="${rulesOpenA ? "" : "hidden"}">
+        <div class="ticket">🌈 Every <b>row</b> and every <b>column</b> has one of each shape ${shapeGhost(0)}${shapeGhost(1)}${shapeGhost(2)} …</div>
+        <div class="ticket">🎨 … and one of each color ${colorDot(0)}${colorDot(1)}${colorDot(2)} — no repeats!</div>
+        <div class="ticket">🤝 Thinker says <b>what's missing</b> from a line — Builder <b>makes it</b> and taps it in!</div>
+      </div>`;
+    $("rulesToggle").addEventListener("click", ()=>{ rulesOpenA=!rulesOpenA; renderClues(); });
   } else {
     area.innerHTML = m.P.clues.map((cl,i)=>
       `<div class="ticket" data-clue="${i}">${clueHTML(cl)}</div>`).join("");

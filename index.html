@@ -221,11 +221,20 @@
   .btn-green{ background:var(--green); color:#fff; border-bottom:4px solid var(--green-dark); margin-bottom:.5rem; }
   .btn-plain{ background:#fff; border:4px solid var(--line); min-height:46px; font-size:.9rem; }
   .btn-ready{
-    background:#fff; color:var(--ink);
-    border:3px solid var(--line); border-bottom:6px solid var(--line);
+    color:#fff;
+    border:3px solid rgba(0,0,0,.15); border-bottom:6px solid rgba(0,0,0,.25);
     margin-bottom:.6rem; transition:background .2s, border-color .2s, color .2s;
   }
-  .btn-ready.ready-done{ background:#E9F9F1; border-color:var(--green); color:var(--green-dark); }
+  /* resting player colours */
+  #readyAlma{ background:#7C4DFF; }   /* purple */
+  #readyAdele{ background:#1F2430; }  /* near-black */
+  /* Alma tapped -> static rainbow (no animation, so reduced-motion safe) */
+  #readyAlma.ready-done{
+    background:linear-gradient(90deg,#ff5b5b,#ff9e3d,#ffe14d,#47b881,#4d9bff,#8a5bff);
+    color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.5); border-color:rgba(0,0,0,.2);
+  }
+  /* Adele tapped -> random colour applied inline in JS */
+  #readyAdele.ready-done{ text-shadow:0 1px 2px rgba(0,0,0,.35); border-color:rgba(0,0,0,.2); }
   .welcome-emoji{ font-size:1.8rem; margin-bottom:.25rem; letter-spacing:.15em; }
   .btn-3d:active{ border-bottom-width:2px; transform:translateY(2px); }
   .win-pieces{ display:flex; justify-content:center; gap:8px; margin-bottom:.5rem; }
@@ -1089,7 +1098,9 @@ function switchMode(m){
 }
 
 document.addEventListener("DOMContentLoaded", ()=>{
-  $("readyAdele").addEventListener("click", ()=>{ if(READY.adele) return; READY.adele=true; sndPlace(); updateWelcome(); });
+  // kid-friendly, no purple / no pink; all read well with white text
+  const ADELE_COLORS = ["#E5533C","#F5A623","#2E8B63","#2F80ED","#17A2B8","#3AAF5C","#E08A00"];
+  $("readyAdele").addEventListener("click", ()=>{ if(READY.adele) return; READY.adele=true; $("readyAdele").style.background = ADELE_COLORS[Math.floor(Math.random()*ADELE_COLORS.length)]; sndPlace(); updateWelcome(); });
   $("readyAlma").addEventListener("click", ()=>{ if(READY.alma) return; READY.alma=true; sndPlace(); updateWelcome(); });
   $("tabA").addEventListener("click", ()=>switchMode("A"));
   $("tabB").addEventListener("click", ()=>switchMode("B"));
